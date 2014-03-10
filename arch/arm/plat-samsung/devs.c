@@ -362,6 +362,7 @@ struct s3c_sdhci_platdata s3c_hsmmc0_def_platdata = {
 	.max_width	= 4,
 	.host_caps	= (MMC_CAP_4_BIT_DATA |
 			   MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED),
+	.cd_type = S3C_SDHCI_CD_NONE,
 };
 
 struct platform_device s3c_device_hsmmc0 = {
