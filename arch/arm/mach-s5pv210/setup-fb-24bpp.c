@@ -30,12 +30,12 @@ static void s5pv210_fb_cfg_gpios(unsigned int base, unsigned int nr)
 
 
 void s5pv210_fb_gpio_setup_24bpp(void)
-{
+{printk("caoxin, %s, %d\r\n", __func__, __LINE__);
 	s5pv210_fb_cfg_gpios(S5PV210_GPF0(0), 8);
 	s5pv210_fb_cfg_gpios(S5PV210_GPF1(0), 8);
 	s5pv210_fb_cfg_gpios(S5PV210_GPF2(0), 8);
 	s5pv210_fb_cfg_gpios(S5PV210_GPF3(0), 4);
-
+//gpio_request_one(S5PV210_GPF3(5), GPIOF_OUT_INIT_HIGH, "GPF3_5");
 	/* Set DISPLAY_CONTROL register for Display path selection.
 	 *
 	 * ouput   |   RGB   |   I80   |   ITU

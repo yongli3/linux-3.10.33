@@ -120,9 +120,9 @@ static struct samsung_keypad_platdata smdkv210_keypad_data __initdata = {
 };
 
 static struct resource smdkv210_dm9000_resources[] = {
-	[0] = DEFINE_RES_MEM(S5PV210_PA_SROM_BANK5, 1),
-	[1] = DEFINE_RES_MEM(S5PV210_PA_SROM_BANK5 + 2, 1),
-	[2] = DEFINE_RES_NAMED(IRQ_EINT(9), 1, NULL, IORESOURCE_IRQ \
+	[0] = DEFINE_RES_MEM(0x88000300, 3),
+	[1] = DEFINE_RES_MEM(0x88000300 + 4, 3),
+	[2] = DEFINE_RES_NAMED(IRQ_EINT(10), 1, NULL, IORESOURCE_IRQ \
 				| IORESOURCE_IRQ_HIGHLEVEL),
 };
 
@@ -145,26 +145,13 @@ static void smdkv210_lte480wv_set_power(struct plat_lcd_data *pd,
 					unsigned int power)
 {
 	if (power) {
-#if !defined(CONFIG_BACKLIGHT_PWM)
-		gpio_request_one(S5PV210_GPD0(3), GPIOF_OUT_INIT_HIGH, "GPD0");
-		gpio_free(S5PV210_GPD0(3));
-#endif
+		printk("caoxin, %s, %d\r\n", __func__, __LINE__);
+		gpio_request_one(S5PV210_GPF3(5), GPIOF_OUT_INIT_HIGH, "GPF3_5");
+		gpio_free(S5PV210_GPF3(5));
 
-		/* fire nRESET on power up */
-		gpio_request_one(S5PV210_GPH0(6), GPIOF_OUT_INIT_HIGH, "GPH0");
-
-		gpio_set_value(S5PV210_GPH0(6), 0);
-		mdelay(10);
-
-		gpio_set_value(S5PV210_GPH0(6), 1);
-		mdelay(10);
-
-		gpio_free(S5PV210_GPH0(6));
-	} else {
-#if !defined(CONFIG_BACKLIGHT_PWM)
-		gpio_request_one(S5PV210_GPD0(3), GPIOF_OUT_INIT_LOW, "GPD0");
-		gpio_free(S5PV210_GPD0(3));
-#endif
+	} else {printk("caoxin, %s, %d\r\n", __func__, __LINE__);
+		gpio_request_one(S5PV210_GPF3(5), GPIOF_OUT_INIT_LOW, "GPF3_5");
+		gpio_free(S5PV210_GPF3(5));
 	}
 }
 
@@ -180,18 +167,18 @@ static struct platform_device smdkv210_lcd_lte480wv = {
 
 static struct s3c_fb_pd_win smdkv210_fb_win0 = {
 	.max_bpp	= 32,
-	.default_bpp	= 24,
+	.default_bpp	= 32,
 	.xres		= 800,
 	.yres		= 480,
 };
 
 static struct fb_videomode smdkv210_lcd_timing = {
-	.left_margin	= 13,
-	.right_margin	= 8,
-	.upper_margin	= 7,
-	.lower_margin	= 5,
-	.hsync_len	= 3,
-	.vsync_len	= 1,
+	.left_margin	= 210,
+	.right_margin	= 38,
+	.upper_margin	= 22,
+	.lower_margin	= 18,
+	.hsync_len	= 10,
+	.vsync_len	= 7,
 	.xres		= 800,
 	.yres		= 480,
 };
@@ -242,17 +229,30 @@ static struct platform_device *smdkv210_devices[] __initdata = {
 static void __init smdkv210_dm9000_init(void)
 {
 	unsigned int tmp;
+	int ret;
 
-	gpio_request(S5PV210_MP01(5), "nCS5");
-	s3c_gpio_cfgpin(S5PV210_MP01(5), S3C_GPIO_SFN(2));
-	gpio_free(S5PV210_MP01(5));
+	s3c_gpio_cfgpin(S5PV210_GPH1(2), S3C_GPIO_INPUT);
+	s3c_gpio_setpull(S5PV210_GPH1(2), S3C_GPIO_PULL_NONE);
+	
+	ret = gpio_request(S5PV210_GPH1(2), "GPH1");
+	if(ret)
+		printk("error, request gpio GPH1(2) failed!\r\n");
+	else
+	{
+		s3c_gpio_cfgpin(S5PV210_GPH1(2), 0xf);
+		s3c_gpio_setpull(S5PV210_GPH1(2), S3C_GPIO_PULL_NONE);
+	}
+
+	gpio_request(S5PV210_MP01(1), "nCS1");
+	s3c_gpio_cfgpin(S5PV210_MP01(1), S3C_GPIO_SFN(2));
+	gpio_free(S5PV210_MP01(1));
 
 	tmp = (5 << S5P_SROM_BCX__TACC__SHIFT);
-	__raw_writel(tmp, S5P_SROM_BC5);
+	__raw_writel(tmp, S5P_SROM_BC1);		//CS1
 
 	tmp = __raw_readl(S5P_SROM_BW);
-	tmp &= (S5P_SROM_BW__CS_MASK << S5P_SROM_BW__NCS5__SHIFT);
-	tmp |= (1 << S5P_SROM_BW__NCS5__SHIFT);
+	tmp &= ~(0xf << 4);
+	tmp |= (1<<7) | (1<<6) | (1<<5) | (1<<4);	// dm9000 16bit
 	__raw_writel(tmp, S5P_SROM_BW);
 }
 
