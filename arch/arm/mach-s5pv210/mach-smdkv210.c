@@ -50,6 +50,8 @@
 #include <plat/clock.h>
 
 #include "common.h"
+#include <plat/media.h>
+#include <mach/media.h>
 
 /* Following are default values for UCON, ULCON and UFCON UART registers */
 #define SMDKV210_UCON_DEFAULT	(S3C2410_UCON_TXILEVEL |	\
@@ -141,6 +143,24 @@ static struct platform_device smdkv210_dm9000 = {
 	},
 };
 
+#define S5PV210_LCD_WIDTH  800
+#define S5PV210_LCD_HEIGHT 480
+#define BYTES_PER_PIXEL 4
+
+#define S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMD (S5PV210_LCD_WIDTH * S5PV210_LCD_HEIGHT * \
+											BYTES_PER_PIXEL * ( CONFIG_FB_S3C_NR_BUFFERS + \
+											(CONFIG_FB_S3C_NUM_OVLY_WIN * CONFIG_FB_S3C_NUM_BUF_OVLY_WIN)))
+
+static struct s5p_media_device s5pv210_media_devs[] = {
+		[0] = { 
+				.id = S5P_MDEV_FIMD,
+				.name = "fimd",
+				.bank = 1,
+				.memsize = S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMD,
+				.paddr = 0,		
+		},
+};
+
 static void smdkv210_lte480wv_set_power(struct plat_lcd_data *pd,
 					unsigned int power)
 {
@@ -171,6 +191,30 @@ static struct s3c_fb_pd_win smdkv210_fb_win0 = {
 	.xres		= 800,
 	.yres		= 480,
 };
+static struct s3c_fb_pd_win smdkv210_fb_win1 = {
+	.max_bpp	= 32,
+	.default_bpp	= 32,
+	.xres		= 800,
+	.yres		= 480,
+};
+static struct s3c_fb_pd_win smdkv210_fb_win2 = {
+	.max_bpp	= 32,
+	.default_bpp	= 32,
+	.xres		= 800,
+	.yres		= 480,
+};
+static struct s3c_fb_pd_win smdkv210_fb_win3 = {
+	.max_bpp	= 32,
+	.default_bpp	= 32,
+	.xres		= 800,
+	.yres		= 480,
+};
+static struct s3c_fb_pd_win smdkv210_fb_win4 = {
+	.max_bpp	= 32,
+	.default_bpp	= 32,
+	.xres		= 800,
+	.yres		= 480,
+};
 
 static struct fb_videomode smdkv210_lcd_timing = {
 	.left_margin	= 210,
@@ -184,7 +228,14 @@ static struct fb_videomode smdkv210_lcd_timing = {
 };
 
 static struct s3c_fb_platdata smdkv210_lcd0_pdata __initdata = {
+	.nr_wins = 5,
+	.default_win = CONFIG_FB_S3C_DEFAULT_WINDOW,
+
 	.win[0]		= &smdkv210_fb_win0,
+	.win[1]		= &smdkv210_fb_win1,
+	.win[2]		= &smdkv210_fb_win2,
+	.win[3]		= &smdkv210_fb_win3,
+	.win[4]		= &smdkv210_fb_win4,
 	.vtiming	= &smdkv210_lcd_timing,
 	.vidcon0	= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
 	.vidcon1	= VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC,
@@ -286,13 +337,18 @@ static void __init smdkv210_map_io(void)
 	s3c24xx_init_clocks(24000000);
 	s3c24xx_init_uarts(smdkv210_uartcfgs, ARRAY_SIZE(smdkv210_uartcfgs));
 	samsung_set_timer_source(SAMSUNG_PWM2, SAMSUNG_PWM4);
+
+	/*	reserve memory size for framebuffer*/
+	s5p_reserve_bootmem(s5pv210_media_devs,
+						ARRAY_SIZE(s5pv210_media_devs), S5P_RANGE_MFC);
 }
 
+/*
 static void __init smdkv210_reserve(void)
 {
 	s5p_mfc_reserve_mem(0x43000000, 8 << 20, 0x51000000, 8 << 20);
 }
-
+*/
 static void __init smdkv210_machine_init(void)
 {
 	s3c_pm_init();
@@ -331,5 +387,5 @@ MACHINE_START(SMDKV210, "SMDKV210")
 	.init_machine	= smdkv210_machine_init,
 	.init_time	= samsung_timer_init,
 	.restart	= s5pv210_restart,
-	.reserve	= &smdkv210_reserve,
+//	.reserve	= &smdkv210_reserve,
 MACHINE_END

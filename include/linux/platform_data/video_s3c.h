@@ -42,6 +42,12 @@ struct s3c_fb_pd_win {
  *
  */
 struct s3c_fb_platdata {
+	int nr_wins;
+	int nr_buffers[5];
+	int default_win;
+	phys_addr_t pmem_start[5];		//starting physical address of memory region
+	size_t pmem_size[5];		//size of memory region
+
 	void	(*setup_gpio)(void);
 
 	struct s3c_fb_pd_win	*win[S3C_FB_MAX_WIN];

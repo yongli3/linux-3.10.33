@@ -14,6 +14,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#define DEBUG
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
@@ -229,6 +230,45 @@ struct s3c_fb {
 static bool s3c_fb_validate_win_bpp(struct s3c_fb_win *win, unsigned int bpp)
 {
 	return win->variant.valid_bpp & VALID_BPP(bpp);
+}
+
+/**
+ * s3c_fb_map_video_memory - validate if the framebuffer memory has been 
+ * allocated. And then allocate them or remap them
+ */
+static int s3c_fb_map_video_memory(struct fb_info *fbi)
+{
+	struct fb_fix_screeninfo *fix = &fbi->fix;
+	struct s3c_fb_win *win = fbi->par;
+	struct s3c_fb *sfb = win->parent;
+	struct s3c_fb_platdata *pdata = sfb->pdata;
+
+	if (fbi->screen_base)
+		return 0;
+
+	if (pdata && pdata->pmem_start[win->index] && (pdata->pmem_size[win->index] >= fix->smem_len)) {
+		fix->smem_start = pdata->pmem_start[win->index];
+		fix->smem_len = pdata->pmem_size[win->index]; 
+		fbi->screen_base = ioremap_wc(fix->smem_start, pdata->pmem_size[win->index]);
+		printk("win->id=%d, pmem_start=0x%x\n",win->index, pdata->pmem_start[win->index]);
+	} else {
+		printk("dma_alloc_writecombine\n");
+		fbi->screen_base = dma_alloc_writecombine(sfb->dev,
+						 PAGE_ALIGN(fix->smem_len),
+						 (unsigned int *)
+						 &fix->smem_start, GFP_KERNEL);
+	}
+	if (!fbi->screen_base)
+		return -ENOMEM;
+
+	dev_info(sfb->dev, "[fb%d] dma: 0x%08x, cpu: 0x%08x, "
+			 "size: 0x%08x\n", win->index,
+			 (unsigned int)fix->smem_start,
+			 (unsigned int)fbi->screen_base, fix->smem_len);
+
+	memset(fbi->screen_base, 0, fix->smem_len);
+
+	return 0;
 }
 
 /**
@@ -1085,7 +1125,7 @@ static int s3c_fb_alloc_memory(struct s3c_fb *sfb, struct s3c_fb_win *win)
 	struct s3c_fb_pd_win *windata = win->windata;
 	unsigned int real_size, virt_size, size;
 	struct fb_info *fbi = win->fbinfo;
-	dma_addr_t map_dma;
+//	dma_addr_t map_dma;
 
 	dev_dbg(sfb->dev, "allocating memory for display\n");
 
@@ -1101,6 +1141,7 @@ static int s3c_fb_alloc_memory(struct s3c_fb *sfb, struct s3c_fb_win *win)
 	size /= 8;
 
 	fbi->fix.smem_len = size;
+/*
 	size = PAGE_ALIGN(size);
 
 	dev_dbg(sfb->dev, "want %u bytes for window\n", size);
@@ -1115,7 +1156,8 @@ static int s3c_fb_alloc_memory(struct s3c_fb *sfb, struct s3c_fb_win *win)
 
 	memset(fbi->screen_base, 0x0, size);
 	fbi->fix.smem_start = map_dma;
-
+*/
+	s3c_fb_map_video_memory(fbi);
 	return 0;
 }
 
@@ -1366,7 +1408,7 @@ static int s3c_fb_probe(struct platform_device *pdev)
 	struct s3c_fb_platdata *pd;
 	struct s3c_fb *sfb;
 	struct resource *res;
-	int win;
+	int win, win_num;
 	int ret = 0;
 	u32 reg;
 
@@ -1477,16 +1519,19 @@ static int s3c_fb_probe(struct platform_device *pdev)
 
 	/* we have the register setup, start allocating framebuffers */
 
-	for (win = 0; win < fbdrv->variant.nr_windows; win++) {
-		if (!pd->win[win])
+	for (win = pd->default_win; win < pd->nr_wins + pd->default_win; win++) {
+		win_num = win % (pd->nr_wins);
+		if (!pd->win[win_num])
 			continue;
-
-		ret = s3c_fb_probe_win(sfb, win, fbdrv->win[win],
-				       &sfb->windows[win]);
+		/* make win[default_win] as device node /dev/fb0 */
+		ret = s3c_fb_probe_win(sfb, win_num, fbdrv->win[win_num],
+				       &sfb->windows[win_num]);
 		if (ret < 0) {
-			dev_err(dev, "failed to create window %d\n", win);
-			for (; win >= 0; win--)
-				s3c_fb_release_win(sfb, sfb->windows[win]);
+			dev_err(dev, "failed to create window %d\n", win_num);
+			for (; win >= pd->default_win; win--)	{
+				win_num = win % (pd->nr_wins);
+				s3c_fb_release_win(sfb, sfb->windows[win_num]);
+			}
 			goto err_pm_runtime;
 		}
 	}

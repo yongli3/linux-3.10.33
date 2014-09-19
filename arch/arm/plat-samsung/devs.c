@@ -184,7 +184,7 @@ struct platform_device s3c_device_fb = {
 
 void __init s3c_fb_set_platdata(struct s3c_fb_platdata *pd)
 {
-	s3c_set_platdata(pd, sizeof(struct s3c_fb_platdata),
+	s3c_fb0_set_platdata(pd, sizeof(struct s3c_fb_platdata),
 			 &s3c_device_fb);
 }
 #endif /* CONFIG_S3C_DEV_FB */
