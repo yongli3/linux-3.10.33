@@ -266,7 +266,7 @@ static int s3c_fb_map_video_memory(struct fb_info *fbi)
 			 (unsigned int)fix->smem_start,
 			 (unsigned int)fbi->screen_base, fix->smem_len);
 
-	memset(fbi->screen_base, 0, fix->smem_len);
+	memset(fbi->screen_base, 0xff000000, fix->smem_len);
 
 	return 0;
 }
@@ -687,6 +687,7 @@ static int s3c_fb_set_par(struct fb_info *info)
 	/* Enable the colour keying for the window below this one */
 	if (win_no > 0) {
 		u32 keycon0_data = 0, keycon1_data = 0;
+		u32 blendeq_data = 0;
 		void __iomem *keycon = regs + sfb->variant.keycon;
 
 		keycon0_data = ~(WxKEYCON0_KEYBL_EN |
@@ -699,6 +700,9 @@ static int s3c_fb_set_par(struct fb_info *info)
 
 		writel(keycon0_data, keycon + WKEYCON0);
 		writel(keycon1_data, keycon + WKEYCON1);
+			
+		blendeq_data = B_FUNC_F_2 | A_FUNC_F_3;
+		writel(blendeq_data, regs + BLENDEQ(win_no));
 	}
 
 	writel(data, regs + sfb->variant.wincon + (win_no * 4));

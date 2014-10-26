@@ -429,6 +429,11 @@
 #define WPALCON_W0PAL_16BPP_A555		(0x5 << 0)
 #define WPALCON_W0PAL_16BPP_565			(0x6 << 0)
 
+/* Window blending equation control */
+#define BLENDEQ(_win)				(0x240 + ((_win) * 4))
+#define B_FUNC_F_2				(0x2 << 6)
+#define A_FUNC_F_3				(0x3 << 0)
+
 /* Blending equation control */
 #define BLENDCON				0x260
 #define BLENDCON_NEW_MASK			(1 << 0)
