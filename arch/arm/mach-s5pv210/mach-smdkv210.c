@@ -53,6 +53,9 @@
 #include <plat/media.h>
 #include <mach/media.h>
 
+#include <media/s5p_fimc.h>
+#include <media/ov2655.h>
+
 /* Following are default values for UCON, ULCON and UFCON UART registers */
 #define SMDKV210_UCON_DEFAULT	(S3C2410_UCON_TXILEVEL |	\
 				 S3C2410_UCON_RXILEVEL |	\
@@ -245,6 +248,35 @@ static struct s3c_fb_platdata smdkv210_lcd0_pdata __initdata = {
 /* USB OTG */
 static struct s3c_hsotg_plat smdkv210_hsotg_pdata;
 
+/* camera OV2655 */
+static struct ov2655_platform_data ov2655_pldata = {
+	.clk_rate	= 24000000UL,
+	.gpio_nreset	= S5PV210_GPE1(4), /* CAM_CIF_NRST */
+	.gpio_nstby	= S5PV210_GPF3(4),	   /* CAM_CIF_PWR */
+};
+
+static struct i2c_board_info ov2655_board_info = {
+	I2C_BOARD_INFO("OV2655", 0x30),
+	.platform_data = &ov2655_pldata,
+};
+
+static struct fimc_source_info x210_camera_sensors[] = {
+	{
+		.mux_id		= 0,
+		.flags		= V4L2_MBUS_PCLK_SAMPLE_FALLING |
+				  V4L2_MBUS_VSYNC_ACTIVE_LOW,
+		.fimc_bus_type	= FIMC_BUS_TYPE_ITU_601,
+		.board_info	= &ov2655_board_info,
+		.i2c_bus_num	= 1,
+		.clk_frequency	= 24000000UL,
+	},
+};
+
+static struct s5p_platform_fimc x210_fimc_md_platdata __initdata = {
+	.source_info	= x210_camera_sensors,
+	.num_clients	= ARRAY_SIZE(x210_camera_sensors),
+};
+
 static struct platform_device *smdkv210_devices[] __initdata = {
 	&s3c_device_adc,
 	&s3c_device_cfcon,
@@ -371,6 +403,10 @@ static void __init smdkv210_machine_init(void)
 	s3c_ide_set_platdata(&smdkv210_ide_pdata);
 
 	s3c_fb_set_platdata(&smdkv210_lcd0_pdata);
+
+	/* FIMC */
+	s3c_set_platdata(&x210_fimc_md_platdata, sizeof(x210_fimc_md_platdata),
+			 &s5p_device_fimc_md);
 
 	samsung_bl_set(&smdkv210_bl_gpio_info, &smdkv210_bl_data);
 
