@@ -251,8 +251,8 @@ static struct s3c_hsotg_plat smdkv210_hsotg_pdata;
 /* camera OV2655 */
 static struct ov2655_platform_data ov2655_pldata = {
 	.clk_rate	= 24000000UL,
-	.gpio_nreset	= S5PV210_GPE1(4), /* CAM_CIF_NRST */
-	.gpio_nstby	= S5PV210_GPF3(4),	   /* CAM_CIF_PWR */
+	.gpio_reset	= S5PV210_GPE1(4), /* CAM_CIF_NRST */
+	.gpio_pwdn	= S5PV210_GPF3(4),	   /* CAM_CIF_PWR */
 };
 
 static struct i2c_board_info ov2655_board_info = {
@@ -266,11 +266,34 @@ static struct fimc_source_info x210_camera_sensors[] = {
 		.flags		= V4L2_MBUS_PCLK_SAMPLE_FALLING |
 				  V4L2_MBUS_VSYNC_ACTIVE_LOW,
 		.fimc_bus_type	= FIMC_BUS_TYPE_ITU_601,
+		.sensor_bus_type	= FIMC_BUS_TYPE_ITU_601,
 		.board_info	= &ov2655_board_info,
 		.i2c_bus_num	= 1,
 		.clk_frequency	= 24000000UL,
 	},
 };
+
+/*
+ * init clk and data of ITU camera interface
+ */
+static void x210_camera_init(void)
+{
+	u32 gpio8, gpio5;
+	int ret;
+
+	gpio8 = S5PV210_GPE0(0);
+	gpio5 = S5PV210_GPE1(0);
+
+	ret = s3c_gpio_cfgall_range(gpio8, 8, S3C_GPIO_SFN(2),
+				    S3C_GPIO_PULL_UP);
+	if (ret)
+		printk("caoxin, error1\n");
+
+	ret = s3c_gpio_cfgall_range(gpio5, 5, S3C_GPIO_SFN(2),
+				     S3C_GPIO_PULL_UP);
+	if (ret)
+		printk("caoxin, error2\n");
+}
 
 static struct s5p_platform_fimc x210_fimc_md_platdata __initdata = {
 	.source_info	= x210_camera_sensors,
@@ -403,7 +426,7 @@ static void __init smdkv210_machine_init(void)
 	s3c_ide_set_platdata(&smdkv210_ide_pdata);
 
 	s3c_fb_set_platdata(&smdkv210_lcd0_pdata);
-
+	x210_camera_init();
 	/* FIMC */
 	s3c_set_platdata(&x210_fimc_md_platdata, sizeof(x210_fimc_md_platdata),
 			 &s5p_device_fimc_md);

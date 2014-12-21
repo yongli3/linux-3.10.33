@@ -21,8 +21,8 @@
 
 struct ov2655_platform_data {
 	unsigned long clk_rate;
-	int gpio_nreset;
-	int gpio_nstby;
+	int gpio_reset;
+	int gpio_pwdn;
 };
 
 #endif /* OV2655_H */

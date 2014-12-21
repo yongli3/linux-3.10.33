@@ -33,22 +33,216 @@
 
 #define DRIVER_NAME  "OV2655" 
 
-static int ov2655_probe(struct i2c_client *client, const struct i2c_device_id *id)
+#define CAM_PWR_ENABLE(gpio)                gpio_direction_output((gpio), 0);
+#define CAM_PWR_DISABLE(gpio)               gpio_direction_output((gpio), 1);
+#define CAM_RESET_HIGH(gpio)                gpio_direction_output((gpio), 1);
+#define CAM_RESET_LOW(gpio)                 gpio_direction_output((gpio), 0);
+
+enum gpio_id {
+	GPIO_PWDN,
+	GPIO_RST,
+	GPIO_NUM,
+};
+
+struct ov2655_info {
+	struct v4l2_subdev sd;
+	struct media_pad pad;
+
+	/* camera sensor gpio  */
+	int gpios[GPIO_NUM];
+
+	struct i2c_client *client;
+};
+
+/*
+ *  ov2655 i2c read function
+ */
+static int ov2655_i2c_read(struct v4l2_subdev *sd, unsigned short reg,
+			unsigned char *value)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	unsigned char data[2];
+	int ret;
+	
+	data[0] = reg >> 8;
+	data[1] = (unsigned char)reg & 0xff;
+	dev_dbg(&client->dev, "data[0] = 0x%x\n", data[0]);
+	dev_dbg(&client->dev, "data[1] = 0x%x\n", data[1]);
+
+	ret = i2c_master_send(client, data, 2);
+	if (ret != 2) {
+		dev_err(&client->dev, "write reg error, ret = %d, addr = 0x%x\n", ret, client->addr);
+		return -1;
+	}
+
+	if (i2c_master_recv(client, value, 1) != 1)
+	{
+		dev_err(&client->dev, "read error\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
+ * Set power on and reset ov2655
+ */
+static void ov2655_power_on_and_reset(struct ov2655_info *ov2655)
+{
+	CAM_PWR_DISABLE(ov2655->gpios[GPIO_PWDN]);          
+	msleep(20);
+	CAM_PWR_ENABLE(ov2655->gpios[GPIO_PWDN]);   
+	msleep(20);
+	
+	CAM_RESET_LOW(ov2655->gpios[GPIO_RST]); 
+	msleep(50);
+	CAM_RESET_HIGH(ov2655->gpios[GPIO_RST]);      
+	msleep(15);
+}
+
+/*
+ * Power off camera sensor
+ */
+static void ov2655_power_off(struct ov2655_info *ov2655)
+{
+	/* Power off camera */
+	CAM_PWR_DISABLE(ov2655->gpios[GPIO_PWDN]);          
+	msleep(20);
+}
+
+/*
+ * Read ov2655 ID and detect the camera
+ * Return 0 if ov2655 is detected, or -ENODEV otherwise
+ */
+static int ov2655_read_id(struct v4l2_subdev *sd)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct ov2655_info *ov2655 = container_of(sd, struct ov2655_info, sd);
+	int ret;
+	char pid_h;
+
+	/* power on and reset camera */
+	ov2655_power_on_and_reset(ov2655);
+
+	ret = ov2655_i2c_read(sd, 0x300a, &pid_h);
+	if (ret < 0) {
+		dev_err(&client->dev, "read sensor id error\n");
+		return -1;
+	}
+
+	dev_dbg(&client->dev, "id = 0x%x\n", pid_h);
+
+	/* power off camera*/
+	ov2655_power_off(ov2655);
+
+	return 0;
+}
+
+
+static int ov2655_set_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh,
+			  struct v4l2_subdev_format *fmt)
+{
+	return 0;
+}
+
+static int ov2655_s_stream(struct v4l2_subdev *sd, int on)
+{
+	return 0;
+}
+
+static int ov2655_s_power(struct v4l2_subdev *sd, int on)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	ov2655_read_id(sd);
+	
+	dev_dbg(&client->dev, "%s, %d\n", __func__, __LINE__);
+	return 0;
+}
+
+static const struct v4l2_subdev_pad_ops ov2655_pad_ops = {
+	.set_fmt = ov2655_set_fmt,
+};
+
+static const struct v4l2_subdev_video_ops ov2655_video_ops = {
+	.s_stream = ov2655_s_stream,
+};
+
+static const struct v4l2_subdev_core_ops ov2655_core_ops = {
+	.s_power = ov2655_s_power,
+};
+
+static const struct v4l2_subdev_ops ov2655_subdev_ops = {
+	.core = &ov2655_core_ops,
+	.pad = &ov2655_pad_ops,
+	.video = &ov2655_video_ops,
+};
+
+/*
+ * Configure the Reset and Power GPIOs for camera
+ */
+static int ov2655_configure_gpios(struct ov2655_info *ov2655,
+						const struct ov2655_platform_data *pdata)
 {
 	int ret;
 
+	ov2655->gpios[GPIO_PWDN] = pdata->gpio_pwdn;
+	ov2655->gpios[GPIO_RST] = pdata->gpio_reset;
+
+	ret = gpio_request(ov2655->gpios[GPIO_PWDN], "GPF34");
+        if (ret)
+        {
+                printk(KERN_ERR "#### failed to request GPF34 for cam_pwr\n");
+        }
+	ret = gpio_request(ov2655->gpios[GPIO_RST], "GPE14");
+        if (ret)
+        {
+                printk(KERN_ERR "#### failed to request GPE14 for cam_reset\n");
+        }
+
+	return 0;
+}
+
+static int ov2655_probe(struct i2c_client *client, const struct i2c_device_id *id)
+{
+	int ret;
+	struct ov2655_info *ov2655;
+	struct v4l2_subdev *sd;
+	const struct ov2655_platform_data *pdata = client->dev.platform_data;
+
 	dev_dbg(&client->dev, "%s, %d\n", __func__, __LINE__);
+
+	ov2655 = devm_kzalloc(&client->dev, sizeof(struct ov2655_info), GFP_KERNEL);
+	if (!ov2655)
+		return -ENOMEM;
+
+	ov2655->client = client;
+
+	sd = &ov2655->sd;
+	v4l2_i2c_subdev_init(sd, client, &ov2655_subdev_ops);
+	strlcpy(sd->name, DRIVER_NAME, sizeof(sd->name));
+
+	ret = ov2655_configure_gpios(ov2655, pdata);
+	if (ret < 0)
+		return ret;
+
+	ov2655->pad.flags = MEDIA_PAD_FL_SOURCE;
+	sd->entity.type = MEDIA_ENT_T_V4L2_SUBDEV_SENSOR;
+	ret = media_entity_init(&sd->entity, 1, &ov2655->pad, 0);
+	if (ret < 0)
+		return ret;
+
+	dev_dbg(&client->dev, "%s, %d, ret = %d\n", __func__, __LINE__, ret);
+
+	ov2655_read_id(sd);
 
 	return ret;
 }
 
 static int ov2655_remove(struct i2c_client *client)
 {
-	int ret;
-
 	dev_dbg(&client->dev, "%s, %d\n", __func__, __LINE__);
 
-	return ret;
+	return 0;
 }
 
 /* id table to match with board config file, such as mach-smdkv210 */
@@ -69,7 +263,6 @@ static struct i2c_driver ov2655_i2c_driver = {
 
 static int __init ov2655_driver_init(void)
 {
-	printk("%s, %d\n", __func__, __LINE__);
 	return i2c_add_driver(&ov2655_i2c_driver);
 }
 module_init(ov2655_driver_init);
