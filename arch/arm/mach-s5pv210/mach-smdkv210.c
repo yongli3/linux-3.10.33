@@ -263,8 +263,7 @@ static struct i2c_board_info ov2655_board_info = {
 static struct fimc_source_info x210_camera_sensors[] = {
 	{
 		.mux_id		= 0,
-		.flags		= V4L2_MBUS_PCLK_SAMPLE_FALLING |
-				  V4L2_MBUS_VSYNC_ACTIVE_LOW,
+		.flags		=  V4L2_MBUS_VSYNC_ACTIVE_LOW,
 		.fimc_bus_type	= FIMC_BUS_TYPE_ITU_601,
 		.sensor_bus_type	= FIMC_BUS_TYPE_ITU_601,
 		.board_info	= &ov2655_board_info,

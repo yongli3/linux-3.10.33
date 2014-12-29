@@ -54,6 +54,18 @@ struct ov2655_info {
 	struct i2c_client *client;
 };
 
+struct ov2655_framesize {
+	u16 width;
+	u16 height;
+};
+
+static const struct ov2655_framesize ov2655_framesizes[] = {
+	{
+		.width = 800,
+		.height = 600,
+	},
+};
+
 /*
  *  ov2655 i2c read function
  */
@@ -85,6 +97,32 @@ static int ov2655_i2c_read(struct v4l2_subdev *sd, unsigned short reg,
 }
 
 /*
+ *  ov2655 i2c write function
+ */
+static int ov2655_i2c_write(struct v4l2_subdev *sd, unsigned short reg,
+			unsigned char value)
+{
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	unsigned char data[3];
+	struct i2c_msg msg;
+	int ret;
+	
+	data[0] = reg >> 8;
+	data[1] = (unsigned char)reg & 0xff;
+	data[2] = value;
+
+	msg.addr = client->addr;
+	msg.len = 3;
+	msg.buf = data;
+
+	ret = i2c_transfer(client->adapter, &msg, 1);
+	if (ret != 1)
+		dev_err(&client->dev, "ov2655 i2c write error\n");
+
+	return 0;
+}
+
+/*
  * Set power on and reset ov2655
  */
 static void ov2655_power_on_and_reset(struct ov2655_info *ov2655)
@@ -111,6 +149,21 @@ static void ov2655_power_off(struct ov2655_info *ov2655)
 }
 
 /*
+ * Initilize ov2655 camera sensor
+ *
+ */
+static void ov2655_reg_init(struct v4l2_subdev *sd)
+{
+	int i;
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+
+	for (i = 0; i < OV2655_INIT_REG_SIZE; i++)
+		ov2655_i2c_write(sd, ov2655_init_reg[i][0], ov2655_init_reg[i][1]);	
+	
+	dev_dbg(&client->dev, "ov2655_reg_init finished, regcnt = %d\n", OV2655_INIT_REG_SIZE);	
+}
+
+/*
  * Read ov2655 ID and detect the camera
  * Return 0 if ov2655 is detected, or -ENODEV otherwise
  */
@@ -131,13 +184,12 @@ static int ov2655_read_id(struct v4l2_subdev *sd)
 	}
 
 	dev_dbg(&client->dev, "id = 0x%x\n", pid_h);
-
+	ov2655_reg_init(sd);
 	/* power off camera*/
 	ov2655_power_off(ov2655);
 
 	return 0;
 }
-
 
 static int ov2655_set_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh,
 			  struct v4l2_subdev_format *fmt)
@@ -147,17 +199,57 @@ static int ov2655_set_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh,
 
 static int ov2655_s_stream(struct v4l2_subdev *sd, int on)
 {
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+
+	dev_dbg(&client->dev, "ov2655_s_stream, on = %d\n", on);
+
 	return 0;
 }
 
 static int ov2655_s_power(struct v4l2_subdev *sd, int on)
-{
+{	
+	struct ov2655_info *ov2655 = container_of(sd, struct ov2655_info, sd);
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
-	ov2655_read_id(sd);
-	
-	dev_dbg(&client->dev, "%s, %d\n", __func__, __LINE__);
+
+	if (on) {
+		ov2655_power_on_and_reset(ov2655);
+		ov2655_reg_init(sd);
+	}
+	else {
+		ov2655_power_off(ov2655);
+	}
+
+	dev_dbg(&client->dev, "ov2655_s_power, on = %d\n", on);
 	return 0;
 }
+
+/*
+ * ov2655 get default format
+ */
+static void ov2655_get_default_format(struct v4l2_mbus_framefmt *mf)
+{
+	mf->width = ov2655_framesizes[0].width;
+	mf->height = ov2655_framesizes[0].height;
+}
+
+/*
+ * v4l2 subdev internal operations: open
+ */
+static int ov2655_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
+{
+	struct v4l2_mbus_framefmt *mf = v4l2_subdev_get_try_format(fh, 0);
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+
+	ov2655_get_default_format(mf);
+	
+	dev_dbg(&client->dev, "ov2655_open\n");
+
+	return 0;
+}
+
+static const struct v4l2_subdev_internal_ops ov2655_sd_internal_ops = {
+	.open = ov2655_open,
+};
 
 static const struct v4l2_subdev_pad_ops ov2655_pad_ops = {
 	.set_fmt = ov2655_set_fmt,
@@ -221,6 +313,8 @@ static int ov2655_probe(struct i2c_client *client, const struct i2c_device_id *i
 	v4l2_i2c_subdev_init(sd, client, &ov2655_subdev_ops);
 	strlcpy(sd->name, DRIVER_NAME, sizeof(sd->name));
 
+	sd->internal_ops = &ov2655_sd_internal_ops;
+
 	ret = ov2655_configure_gpios(ov2655, pdata);
 	if (ret < 0)
 		return ret;
@@ -233,7 +327,10 @@ static int ov2655_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	dev_dbg(&client->dev, "%s, %d, ret = %d\n", __func__, __LINE__, ret);
 
-	ov2655_read_id(sd);
+	/* detect camera sensor is ov2655 */
+	ret = ov2655_read_id(sd);
+	if (ret < 0)
+		dev_err(&client->dev, "Cann't read id of ov2655\n");
 
 	return ret;
 }
