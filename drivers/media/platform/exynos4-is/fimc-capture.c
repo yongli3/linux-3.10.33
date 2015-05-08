@@ -524,7 +524,7 @@ static int fimc_capture_open(struct file *file)
 		goto unlock;
 	}
 
-	if (v4l2_fh_is_singular_file(file)) {
+	if (v4l2_fh_is_singular_file(file)) { printk("caoxin, %s, %d\n", __func__, __LINE__);
 		ret = fimc_pipeline_call(fimc, open, &fimc->pipeline,
 					 &fimc->vid_cap.vfd.entity, true);
 

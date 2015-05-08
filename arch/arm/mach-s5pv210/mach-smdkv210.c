@@ -29,6 +29,8 @@
 #include <video/platform_lcd.h>
 #include <video/samsung_fimd.h>
 
+#include <linux/platform_data/leds-s5pv210.h>
+
 #include <mach/map.h>
 #include <mach/regs-clock.h>
 
@@ -245,6 +247,22 @@ static struct s3c_fb_platdata smdkv210_lcd0_pdata __initdata = {
 	.setup_gpio	= s5pv210_fb_gpio_setup_24bpp,
 };
 
+/* LEDS */
+static struct s5pv210_led_platdata x210_led1_pdata = {
+	.name		= "led1",
+	.gpio		= S5PV210_GPJ0(3), /* led-D22 */
+	.flags		= S5PV210_LEDF_ACTLOW,
+	.def_trigger	= "hearbeat",
+};
+
+static struct platform_device x210_led1 = {
+	.name		= "s5pv210_led",
+	.id		= 1,
+	.dev		= {
+		.platform_data	= &x210_led1_pdata,
+	},
+};
+
 /* USB OTG */
 static struct s3c_hsotg_plat smdkv210_hsotg_pdata;
 
@@ -329,6 +347,7 @@ static struct platform_device *smdkv210_devices[] __initdata = {
 	&samsung_device_keypad,
 	&smdkv210_dm9000,
 	&smdkv210_lcd_lte480wv,
+	&x210_led1,
 };
 
 static void __init smdkv210_dm9000_init(void)
